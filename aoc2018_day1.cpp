@@ -18,9 +18,9 @@ int32_t GetFirstFreqReachedTwice(const FreqChangeVector& freqChanges)
     int32_t freq = 0;
     while (true)
     {
-        for (int i = 0; i < freqChanges.size(); ++i)
+        for (uint32_t freqChange : freqChanges)
         {
-            freq += freqChanges[i];
+            freq += freqChange;
             if (frequencies.find(freq) != frequencies.end())
             {
                 return freq;
@@ -33,18 +33,25 @@ int32_t GetFirstFreqReachedTwice(const FreqChangeVector& freqChanges)
     }
 }
 
-int main()
+FreqChangeVector ReadInput()
 {
     FreqChangeVector freqChanges;
+
     int32_t freqChange;
-    while(std::cin >> freqChange)
+    while (std::cin >> freqChange)
     {
         freqChanges.push_back(freqChange);
     }
+
+    return freqChanges;
+}
+
+int main()
+{
+    FreqChangeVector freqChanges = ReadInput();
 
     std::cout << GetResultingFreq(freqChanges) << "\n";
     std::cout << GetFirstFreqReachedTwice(freqChanges) << "\n";
 
     return 0;
-
 }
