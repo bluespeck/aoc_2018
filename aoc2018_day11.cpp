@@ -12,37 +12,46 @@
 #include <vector>
 #include <list>
 
-struct CellCoords
+struct CellBlockPower
 {
     int x, y;
     int size;
+    int64_t power;
 };
 
-CellCoords GetMaxPower(int64_t cells[301][301], int size)
+CellBlockPower GetMaxPower(int64_t cells[301][301], int size)
 {
-    int64_t maxPower = -900000;
-    int xMax = 0;
-    int yMax = 0;
-    int sizeMax = 0;
+    CellBlockPower max = { 0, 0, 0, -90000 };
 
     for (int x = 1; x <= 300 - size; x++)
-        for (int y = 1; y <= 300 - size; y++)
+    {
+        int64_t sum = 0;
+        for (int i = x; i < x + size; i++)
+            for (int j = 1; j < size; j++)
+            {
+                sum += cells[i][j];
+            }
+
+        for (int y = size; y <= 300; y++)
         {
-            int64_t sum = 0;
             for (int i = x; i < x + size; i++)
             {
-                for (int j = y; j < y + size; j++)
-                    sum += cells[i][j];
+                sum += cells[i][y];
             }
-            if (sum > maxPower)
+            if (sum > max.power)
             {
-                maxPower = sum;
-                xMax = x;
-                yMax = y;
-                sizeMax = size;
+                max.power = sum;
+                max.x = x;
+                max.y = y + 1 - size;
+                max.size = size;
+            }
+            for (int i = x; i < x + size; i++)
+            {
+                sum -= cells[i][y + 1 - size];
             }
         }
-    return { xMax, yMax, sizeMax };
+    }
+    return max;
 }
 
 void ProcessCellPower(int64_t cells[301][301], int64_t serialNumber)
@@ -74,13 +83,12 @@ int main()
         std::cout << maxCoords.x << ',' << maxCoords.y << '\n';
     }
     {
-        int64_t maxPower = -900000;
-        CellCoords maxCoords = { 0, 0, 0 };
+        CellBlockPower maxCoords = { 0, 0, 0, -90000 };
 
         for (int size = 1; size <= 300; size++)
         {
-            CellCoords coords = GetMaxPower(cells, size);
-            if (cells[coords.x][coords.y] > maxPower)
+            CellBlockPower coords = GetMaxPower(cells, size);
+            if ( coords.power > maxCoords.power )
                 maxCoords = coords;
         }
         std::cout << maxCoords.x << "," << maxCoords.y << "," << maxCoords.size;
