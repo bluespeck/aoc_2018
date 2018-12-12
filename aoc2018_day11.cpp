@@ -1,16 +1,5 @@
-#include <algorithm>
-#include <array>
-#include <cassert>
-#include <cstdio>
 #include <cstdint>
 #include <iostream>
-#include <fstream>
-#include <iomanip>
-#include <set>
-#include <string>
-#include <utility>
-#include <vector>
-#include <list>
 
 struct CellBlockPower
 {
