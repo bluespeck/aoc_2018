@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <iomanip>
 const int size = 52;
 
 using Grid = std::array<std::array<char, size>, size>;
@@ -41,7 +42,7 @@ Grid ReadInput()
     return grid;
 }
 
-int CountAcres(Grid&grid, int x, int y, char acre)
+int CountAdjacentAcres(Grid&grid, int x, int y, char acre)
 {
     int count = 0;
     for (int i = 0; i < 8; i++)
@@ -69,15 +70,15 @@ void NextGrid(Grid& grid)
             switch (grid[i][j])
             {
             case '.':
-                if (CountAcres(grid, i, j, '|') >= 3)
+                if (CountAdjacentAcres(grid, i, j, '|') >= 3)
                     newLine[j] = '|';
                 break;
             case '|':
-                if (CountAcres(grid, i, j, '#') >= 3)
+                if (CountAdjacentAcres(grid, i, j, '#') >= 3)
                     newLine[j] = '#';
                 break;
             case '#':
-                if (CountAcres(grid, i, j, '#') < 1 || CountAcres(grid, i, j, '|') < 1)
+                if (CountAdjacentAcres(grid, i, j, '#') < 1 || CountAdjacentAcres(grid, i, j, '|') < 1)
                     newLine[j] = '.';
                 break;
             }
@@ -89,30 +90,103 @@ void NextGrid(Grid& grid)
     grid[grid.size() - 2] = newLine;
 }
 
-int main()
+int32_t ComputeResourceValue(const Grid& grid)
 {
-    Grid grid = ReadInput();
-
-    int minutes = 1000;
-
-    for (int64_t i = 0; i < minutes; i++)
-        NextGrid(grid);
-
-    int trees = 0, lumberyards = 0;
-    for (int i = 1; i < grid.size() -1 ; i++)
+    int32_t trees = 0, lumberyards = 0;
+    for (int i = 1; i < grid.size() - 1; i++)
     {
         for (int j = 1; j < grid[i].size() - 1; j++)
         {
-            std::cout << grid[i][j];
             if (grid[i][j] == '|')
                 trees++;
             else if (grid[i][j] == '#')
                 lumberyards++;
         }
-        std::cout << "\n";
     }
 
-    std::cout << trees * lumberyards;
+    return trees * lumberyards;
+}
+
+void PrintGrid(const Grid& grid)
+{
+    for (int i = 1; i < grid.size() - 1; i++)
+    {
+        for (int j = 1; j < grid[i].size() - 1; j++)
+        {
+            std::cout << grid[i][j];
+        }
+        std::cout << "\n";
+    }
+    std::cout << "\n";
+}
+
+void FindPeriodAndStartIndex(std::vector<int64_t>& values, size_t& period, size_t& startIndex)
+{
+    period = 0;
+    startIndex = 0;
+    size_t maxPeriod = values.size() / 2;
+    for (size_t tryPeriod = 2; tryPeriod <= maxPeriod; tryPeriod++)
+    {
+        for (size_t tryStartIndex = 0; tryStartIndex < values.size() - tryPeriod; tryStartIndex++)
+        {
+            bool periodFound = true;
+            for (size_t i = 0; i < tryPeriod; i++)
+            {
+                if (values[tryStartIndex + i] != values[tryStartIndex + i + tryPeriod])
+                {
+                    periodFound = false;
+                    break;
+                }
+            }
+
+            if (periodFound)
+            {
+                period = tryPeriod;
+                startIndex = tryStartIndex;
+                break;
+            }
+        }
+        if (period != 0)
+            break;
+    }
+}
+
+int64_t ComputeResourceValueAfterTimePeriod(Grid grid, size_t minutes)
+{
+    if (minutes < 2000)
+    {
+        for (int i = 0; i < 10; i++)
+        {
+            NextGrid(grid);
+        }
+        return ComputeResourceValue(grid);
+    }
+    else
+    {
+        size_t sampleSize = 2000; // sample size in which to test if the grid has become periodic
+
+        std::vector<int64_t> sampleResourceValues;
+
+        for (size_t i = 0; i < sampleSize; i++)
+        {
+            NextGrid(grid);
+            sampleResourceValues.push_back(ComputeResourceValue(grid));
+        }
+
+        size_t startSampleIndex, period;
+        FindPeriodAndStartIndex(sampleResourceValues, period, startSampleIndex);
+        std::cout << period << " " << startSampleIndex << "\n";
+        size_t index = startSampleIndex + (1'000'000'000 - (startSampleIndex + 1)) % period;
+        return sampleResourceValues[index];
+    }
+}
+
+int main()
+{
+    Grid grid = ReadInput();
+
+    std::cout << ComputeResourceValueAfterTimePeriod(grid, 10) << "\n";
+    std::cout << ComputeResourceValueAfterTimePeriod(grid, 1'000'000'000) << "\n";
 
     return 0;
 }
