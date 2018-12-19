@@ -182,28 +182,32 @@ void SimulateWater(Grid& grid, int hOffset)
     }
 }
 
+int CountCells(Grid& grid, size_t firstRow, size_t lastRow, const std::vector<char>& cellValues)
+{
+    int cellCount = 0;
+    for (int i = firstRow; i <= lastRow; i++)
+        for (int k = 0; k < grid[i].size(); k++)
+        {
+            for(auto cellValue : cellValues)
+            if (grid[i][k] == cellValue)
+                cellCount++;
+        }
+    return cellCount;
+}
 
 int main()
 {
     LineVec lines = ReadInput();
     int hOffset = 0;
-    int vMin = 0, vMax = 0;
-    Grid grid = MakeGrid(lines, hOffset, vMin, vMax);
+    int firstRow = 0, lastRow = 0;
+    Grid grid = MakeGrid(lines, hOffset, firstRow, lastRow);
     grid[0][500 - hOffset] = '+';
     grid[1][500 - hOffset] = '|';
     SimulateWater(grid, hOffset);
     //PrintGrid(grid);
 
-    int waterCellCount = 0;
-    for (int i = vMin; i <= vMax; i++)
-        for (int k = 0; k < grid[i].size(); k++)
-        {
-            if (grid[i][k] == '~')
-                waterCellCount++;
-        }
-
-    std::cout << waterCellCount << '\n';
-
+    std::cout << CountCells(grid, firstRow, lastRow, { '~', '|' }) << '\n';
+    std::cout << CountCells(grid, firstRow, lastRow, { '~' }) << '\n';
 
     return 0;
 }
