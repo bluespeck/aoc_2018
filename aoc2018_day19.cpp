@@ -114,36 +114,33 @@ std::array<Op, 16> operations{
     eqir, eqri, eqrr
 };
 
-void RunProgram(const Program& program, Registers& regs, int ipr, int numSteps)
+void RunProgram(const Program& program, Registers& regs, int ipr, int maxNumSteps = 0)
 {
-    bool debug = false;
     int step = 0;
-    int64_t prevValue = 0;
     while(regs[ipr] < program.size())
     {
-        if (regs[0] != prevValue)
+        if (maxNumSteps > 0 && step >= maxNumSteps)
         {
-            std::cout << regs[0] << " ";
-            prevValue = regs[0];
+            break;
         }
         auto& instruction = program[regs[ipr]];
-        if (debug)
-        {
-            std::cout << "ip=" << regs[ipr];
-            std::cout << " [";
-            for (int i = 0; i < 5; i++)
-                std::cout << regs[i] << ", ";
-            std::cout << regs[5] << "] " << instruction.opcode << " " << instruction.a << " " << instruction.b << " " << instruction.c << " ";
-        }
+
+        //{
+        //    std::cout << "ip=" << regs[ipr];
+        //    std::cout << " [";
+        //    for (int i = 0; i < 5; i++)
+        //        std::cout << regs[i] << ", ";
+        //    std::cout << regs[5] << "] " << instruction.opcode << " " << instruction.a << " " << instruction.b << " " << instruction.c << " ";
+        //}
         operations[instruction.opcode](instruction.a, instruction.b, instruction.c, regs);
 
-        if (debug)
-        {
-            std::cout << " [";
-            for (int i = 0; i < 5; i++)
-                std::cout << regs[i] << ", ";
-            std::cout << regs[5] << "]\n";
-        }
+        //{
+        //    std::cout << " [";
+        //    for (int i = 0; i < 5; i++)
+        //        std::cout << regs[i] << ", ";
+        //    std::cout << regs[5] << "]\n";
+        //}
+
         regs[ipr] ++;
         step++;
 
@@ -186,6 +183,16 @@ void ReadInput(Program& program, int& ip)
     }
 }
 
+int64_t SumOfDivisors(int64_t number)
+{
+    int64_t sum = 1;
+    for (int64_t i = 2; i <= number / 2 + 1; i++)
+        if (number % i == 0)
+            sum += i;
+    sum += number;
+    return sum;
+}
+
 int main()
 {
     Program program;
@@ -194,15 +201,18 @@ int main()
 
     {
         Registers regs = { 0, 0, 0, 0, 0, 0 };
-        RunProgram(program, regs, ipr, 22);
+        RunProgram(program, regs, ipr);
         std::cout << "\n" << regs[0] << "\n";
     }
 
 
     {
         Registers regs = { 1, 0, 0, 0, 0, 0 };
-        RunProgram(program, regs, ipr, 22);
-        // problem 2 (prog E(div reg-2))
+        RunProgram(program, regs, ipr, 1000);
+        if (regs[ipr] < program.size())
+        {
+            std::cout << SumOfDivisors(regs[2]) << "\n";
+        }
     }
 
     return 0;
