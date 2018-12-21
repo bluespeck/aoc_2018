@@ -244,6 +244,7 @@ int main()
 					--j;
 				}
 				regex.erase(j, i - j + 1);
+				i = j;
 				foundDeadEnd = true;
 			}
 
