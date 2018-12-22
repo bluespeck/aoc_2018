@@ -174,7 +174,7 @@ void ComputeDistances(const Grid& grid, DistGrid& distGrid, int x, int y)
             )
             continue;
 
-        ToolDists nDist;
+        ToolDists nDist = { infinity, infinity, infinity };
 
         switch (grid[ny][nx])
         {
@@ -270,17 +270,19 @@ void ComputeDistancesNoRecursion(const Grid& grid, DistGrid& distGrid)
                     if (nx < 0 || ny < 0 || nx >= grid[i].size() || ny >= grid.size())
                         continue;
 
-                    ToolDists nDist;
+                    ToolDists nDist = { infinity, infinity, infinity };
 
                     switch (grid[y][x])
                     {
                     case 0:
-                        nDist[Tool::torch] = std::min(
+                        if(grid[ny][nx] != 1)
+                            nDist[Tool::torch] = std::min(
                             {
                                 distGrid[ny][nx][Tool::torch] + 1,
                                 distGrid[ny][nx][Tool::climbingGear] + 8,
                                 distGrid[ny][nx][Tool::neither] + 8
                             });
+                        if (grid[ny][nx] != 2)
                         nDist[Tool::climbingGear] = std::min(
                             {
                                 distGrid[ny][nx][Tool::torch] + 8,
@@ -291,13 +293,15 @@ void ComputeDistancesNoRecursion(const Grid& grid, DistGrid& distGrid)
                         break;
                     case 1:
                         nDist[Tool::torch] = infinity;
-                        nDist[Tool::climbingGear] = std::min(
+                        if (grid[ny][nx] != 2)
+                            nDist[Tool::climbingGear] = std::min(
                             {
                                 distGrid[ny][nx][Tool::torch] + 8,
                                 distGrid[ny][nx][Tool::climbingGear] + 1,
                                 distGrid[ny][nx][Tool::neither] + 8
                             });
-                        nDist[Tool::neither] = std::min(
+                        if (grid[ny][nx] != 0)
+                            nDist[Tool::neither] = std::min(
                             {
                                 distGrid[ny][nx][Tool::torch] + 8,
                                 distGrid[ny][nx][Tool::climbingGear] + 8,
@@ -305,14 +309,16 @@ void ComputeDistancesNoRecursion(const Grid& grid, DistGrid& distGrid)
                             });
                         break;
                     case 2:
-                        nDist[Tool::torch] = std::min(
+                        if (grid[ny][nx] != 1)
+                            nDist[Tool::torch] = std::min(
                             {
                                 distGrid[ny][nx][Tool::torch] + 1,
                                 distGrid[ny][nx][Tool::climbingGear] + 8,
                                 distGrid[ny][nx][Tool::neither] + 8
                             });
                         nDist[Tool::climbingGear] = infinity;
-                        nDist[Tool::neither] = std::min(
+                        if (grid[ny][nx] != 0)
+                            nDist[Tool::neither] = std::min(
                             {
                                 distGrid[ny][nx][Tool::torch] + 8,
                                 distGrid[ny][nx][Tool::climbingGear] + 8,
@@ -363,8 +369,8 @@ DistGrid ComputeDistances(Grid& grid)
 Grid BuildGrid(int depth)
 {
     Grid grid;
-    const int extra = 10;
     int maxCoord = tx > ty ? tx : ty;
+    const int extra = 10;
     grid.resize(maxCoord + extra);
     for (int i = 0; i < grid.size(); i++)
         grid[i].resize(maxCoord + extra);
@@ -493,11 +499,39 @@ void PrintSolutionGrids(DistGrid& grid, Grid mainGrid)
         assert(found == true);
         path.emplace_back(std::make_pair(x, y), t);
     }
-
+    std::reverse(path.begin(), path.end());
+    int tool = 0;
+    int time = -1;
+    int prevX = 0;
+    int prevY = 0;
     for (auto& elem : path)
     {
         int cellType = mainGrid[elem.first.second][elem.first.first];
-        assert(cellType == 0 && elem.second != 2 || cellType == 1 && elem.second != 0 || cellType == 2 && elem.second != 1);
+        if (cellType == 0 && elem.second == 2 || cellType == 1 && elem.second == 0 || cellType == 2 && elem.second == 1)
+        {
+            std::cout << "--------------\n";
+        }
+        if (tool != elem.second)
+        {
+            int prevCellType = mainGrid[prevY][prevX];
+            if ((prevCellType == 0 && elem.second == 2)
+                || (prevCellType == 1 && elem.second == 0)
+                || prevCellType == 2 && elem.second == 1)
+            {
+                std::cout << "--------------\n";
+            }
+            time += 8;
+            tool = elem.second;
+        }
+        else
+            time++;
+        prevX = elem.first.first;
+        prevY = elem.first.second;
+    }
+    std::cout << "Time : " << time << "\n";
+
+    for (auto& elem : path)
+    {
         mainGrid[elem.first.second][elem.first.first] = -elem.second - 1;
     }
     PrintGrid(mainGrid);
