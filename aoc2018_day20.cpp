@@ -8,260 +8,292 @@
 #include <set>
 #include <stack>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <sstream>
 
-struct Room
-{
-	Room* doors[4] = { nullptr, nullptr, nullptr, nullptr }; // NESW
-};
-
-
-using PathVec = std::vector<std::string>;
-using BrachVec = std::vector<int>;
-
-struct RegexGroup;
-
-enum class RegexGroupType
-{
-	normal,
-	branch
-};
-
-struct RegexGroup
-{
-	int start;
-	int end;
-	std::vector<RegexGroup*> children;
-
-	PathVec paths;
-
-	RegexGroupType type;
-};
-
-int ParseRegexGroups(RegexGroup* group, std::string& regex, int start)
-{
-	group->start = start;
-	group->type = RegexGroupType::normal;
-	for (int i = start; i < regex.size(); i++)
-	{
-		if (regex[i] == '(')
-		{
-			regex[i] = '.';
-			RegexGroup *regexGroup = new RegexGroup;
-			group->children.push_back(regexGroup);
-			regexGroup->end = ParseRegexGroups(regexGroup, regex, i + 1);
-			if (regex[regexGroup->end] == ')')
-				regex[regexGroup->end] = '.';
-		}
-		else if (regex[i] == ')')
-		{
-			return i;
-		}
-	}
-}
-
-bool InsideGroupRange(RegexGroup* group, int position)
-{
-	return group->start <= position && group->end > position;
-}
-
-bool InsideChildrenGroupRanges(RegexGroup* group, int position)
-{
-	for (auto child : group->children)
-		if (InsideGroupRange(child, position))
-			return true;
-
-	return false;
-}
-
-void FurtherSplitRegexGroups(RegexGroup* group, const std::string& regex)
-{
-	int regexPos = group->start;
-	std::vector<int> pipePositions;
-	for (int i = group->start; i < group->end; i++)
-	{
-		if (regex[i] == '|' && !InsideChildrenGroupRanges(group, i))
-			pipePositions.push_back(i);
-	}
-	if (pipePositions.size() > 0)
-	{
-		pipePositions.push_back(group->end);
-	}
-
-	if (pipePositions.size() == 0)
-	{
-		int pos = group->start;
-		std::vector<RegexGroup*> freeGroups;
-		for (auto& child : group->children)
-		{
-			if (pos < child->start - 1)
-			{
-				RegexGroup* newGroup = new RegexGroup;
-				newGroup->start = pos;
-				newGroup->end = child->start - 1;
-				freeGroups.push_back(newGroup);
-			}
-			freeGroups.push_back(child);
-			pos = child->end + 1;
-			FurtherSplitRegexGroups(child, regex);
-		}
-		if (pos < group->end)
-		{
-			RegexGroup* newGroup = new RegexGroup;
-			newGroup->start = pos;
-			newGroup->end = group->end;
-			newGroup->type = RegexGroupType::normal;
-			freeGroups.push_back(newGroup);
-		}
-		group->children = freeGroups;
-	}
-	else
-	{
-		group->type = RegexGroupType::branch;
-		std::vector<RegexGroup*> newChildren;
-		int pos = group->start;
-		for (auto pipePos : pipePositions)
-		{
-			RegexGroup* normalGroup = new RegexGroup;
-			normalGroup->start = pos;
-			normalGroup->end = pipePos;
-			normalGroup->type = RegexGroupType::normal;
-
-			std::vector<RegexGroup*> freeGroups;
-			if (pos < pipePos)
-			{
-				for (auto& child : group->children)
-				{
-					if (child->start >= pos && child->start < pipePos)
-					{
-						if (pos < child->start)
-						{
-							RegexGroup* newGroup = new RegexGroup;
-							newGroup->start = pos;
-							newGroup->end = child->start - 1;
-							newGroup->type = RegexGroupType::normal;
-							freeGroups.push_back(newGroup);
-						}
-						freeGroups.push_back(child);
-						pos = child->end + 1;
-						FurtherSplitRegexGroups(child, regex);
-					}
-				}
-			}
-			{
-				RegexGroup* newGroup = new RegexGroup;
-				newChildren.push_back(newGroup);
-				newGroup->start = pos;
-				newGroup->end = pipePos;
-				newGroup->type = RegexGroupType::normal;
-				newGroup->children = freeGroups;
-			}
-			pos = pipePos + 1;
-		}
-		group->children = newChildren;
-	}
-}
 
 void ParseRegex(std::string& regex)
 {
-	static int groupMaxLength[1000] = { 0 };
-	static int fragmentLength[1000] = { 0 };
+    static int groupMaxLength[1000] = { 0 };
+    static int fragmentLength[1000] = { 0 };
 
-	int groupLevel = 0;
+    int groupLevel = 0;
 
-	for (int pos = 0; pos < regex.size(); pos++)
-	{
-		switch (regex[pos])
-		{
-		case '(':
-			groupMaxLength[groupLevel + 1] = 0;
-			fragmentLength[groupLevel + 1] = 0;
-			++groupLevel;
-			break;
-		case ')':
-			if (groupMaxLength[groupLevel] < fragmentLength[groupLevel])
-			{
-				groupMaxLength[groupLevel] = fragmentLength[groupLevel];
-			}
-			fragmentLength[groupLevel - 1] += groupMaxLength[groupLevel];
-			--groupLevel;
-			break;
-		case '|':
-			if (groupMaxLength[groupLevel] < fragmentLength[groupLevel])
-			{
-				groupMaxLength[groupLevel] = fragmentLength[groupLevel];
-			}
-			fragmentLength[groupLevel] = 0;
-			break;
-		case 'N':
-		case 'E':
-		case 'S':
-		case 'W':
-			fragmentLength[groupLevel]++;
-			break;
-		case '^':
-			break;
-		case '$':
-			if (groupMaxLength[groupLevel] < fragmentLength[groupLevel])
-			{
-				groupMaxLength[groupLevel] = fragmentLength[groupLevel];
-			}
-			break;
-		}
-	}
-	std::cout << "Max path length is " << groupMaxLength[groupLevel] << "\n";
+    for (int pos = 0; pos < regex.size(); pos++)
+    {
+        switch (regex[pos])
+        {
+        case '(':
+            groupMaxLength[groupLevel + 1] = 0;
+            fragmentLength[groupLevel + 1] = 0;
+            ++groupLevel;
+            break;
+        case ')':
+            if (groupMaxLength[groupLevel] < fragmentLength[groupLevel])
+            {
+                groupMaxLength[groupLevel] = fragmentLength[groupLevel];
+            }
+            fragmentLength[groupLevel - 1] += groupMaxLength[groupLevel];
+            --groupLevel;
+            break;
+        case '|':
+            if (groupMaxLength[groupLevel] < fragmentLength[groupLevel])
+            {
+                groupMaxLength[groupLevel] = fragmentLength[groupLevel];
+            }
+            fragmentLength[groupLevel] = 0;
+            break;
+        case 'N':
+        case 'E':
+        case 'S':
+        case 'W':
+            fragmentLength[groupLevel]++;
+            break;
+        case '^':
+            break;
+        case '$':
+            if (groupMaxLength[groupLevel] < fragmentLength[groupLevel])
+            {
+                groupMaxLength[groupLevel] = fragmentLength[groupLevel];
+            }
+            break;
+        }
+    }
+    std::cout << "Max path length is " << groupMaxLength[groupLevel] << "\n";
 }
 
-void RemoveAllSubstrings(std::string& str, std::string pattern)
+using DeadEnd = std::pair<int, std::string>;
+using DeadEndSequenceVec = std::vector<DeadEnd>;
+
+struct RegexFragment
 {
-	size_t pos = std::string::npos;
-	do
-	{
-		pos = str.find(pattern);
-		if (pos != std::string::npos)
-		{
-			str.erase(pos, pattern.size());
-		}
-	} while (pos != std::string::npos);
+    std::string regexFragment;
+    std::vector<RegexFragment*> children;
+
+    RegexFragment* proxyOf = nullptr;
+    int deadEndIndex = -1;
+    bool dirty = false;
+};
+
+inline bool IsLeaf(RegexFragment* node)
+{
+    return node != nullptr && node->proxyOf == nullptr && node->children.size() == 0;
+}
+
+void AddAsChildToAllLeaves(RegexFragment* node, RegexFragment* nodeToAdd)
+{
+    if (node == nullptr || node->dirty)
+        return;
+
+    if (IsLeaf(node))
+    {
+        node->children.push_back(new RegexFragment);
+        node->children.back()->proxyOf = nodeToAdd;
+        node->dirty = true;
+    }
+    else
+    {
+        if (node->proxyOf == nullptr)
+        {
+            for (auto child : node->children)
+                AddAsChildToAllLeaves(child, nodeToAdd);
+        }
+        else
+        {
+            AddAsChildToAllLeaves(node->proxyOf, nodeToAdd);
+        }
+    }
+}
+
+void CleanTree(RegexFragment* node)
+{
+    if (node == nullptr)
+        return;
+
+    node->dirty = false;
+
+    if (node->proxyOf == nullptr)
+    {
+        for (auto child : node->children)
+            CleanTree(child);
+    }
+    else
+    {
+        //if (node->proxyOf->proxyOf == nullptr
+        //    && node->proxyOf->children.size() == 1 && node->proxyOf->regexFragment.size() == 0
+        //    && node->proxyOf->children[0]->proxyOf != nullptr)
+        //{
+        //    node->proxyOf = node->proxyOf->children[0]->proxyOf;
+        //}
+        CleanTree(node->proxyOf);
+    }
+}
+
+bool EraseAllSubStr(std::string & str, const std::string & toErase)
+{
+    size_t pos = std::string::npos;
+    bool found = false;
+    while ((pos = str.find(toErase)) != std::string::npos)
+    {
+        str.erase(pos, toErase.length());
+        found = true;
+    }
+    return found;
+}
+
+RegexFragment* ParseRegexTree(std::string& regex, const DeadEndSequenceVec& deadEnds)
+{
+    int groupLevel = 0;
+    int currentFragmentStart = 0;
+    RegexFragment* root = new RegexFragment;
+
+    RegexFragment* groupRoot[1000];
+    RegexFragment* branchRoot[1000];
+    RegexFragment* branchCurrent[1000];
+    int deadEndIndex = 0;
+
+    for (int pos = 0; pos < regex.size(); pos++)
+    {
+        if (deadEnds.size() > deadEndIndex && pos == deadEnds[deadEndIndex].first)
+        {
+            branchCurrent[groupLevel]->deadEndIndex = deadEndIndex;
+            deadEndIndex++;
+        }
+
+        switch (regex[pos])
+        {
+        case '(':
+            ++groupLevel;
+
+            groupRoot[groupLevel] = new RegexFragment;
+
+            AddAsChildToAllLeaves(branchRoot[groupLevel - 1], groupRoot[groupLevel]);
+            CleanTree(branchRoot[groupLevel - 1]);
+            branchRoot[groupLevel] = new RegexFragment;
+            groupRoot[groupLevel]->children.push_back(branchRoot[groupLevel]);
+            branchCurrent[groupLevel] = branchRoot[groupLevel];
+
+            break;
+        case ')':
+        {
+            --groupLevel;
+            auto* newFragment = new RegexFragment;
+            AddAsChildToAllLeaves(branchRoot[groupLevel], newFragment);
+            CleanTree(branchRoot[groupLevel]);
+            branchCurrent[groupLevel] = newFragment;
+            break;
+        }
+        case '|':
+        {
+            branchRoot[groupLevel] = new RegexFragment;
+            groupRoot[groupLevel]->children.push_back(branchRoot[groupLevel]);
+            branchCurrent[groupLevel] = branchRoot[groupLevel];
+            break;
+        }
+
+        case 'N':
+        case 'E':
+        case 'S':
+        case 'W':
+            branchCurrent[groupLevel]->regexFragment.push_back(regex[pos]);
+            break;
+        case '^':
+            groupRoot[groupLevel] = root;
+            branchRoot[groupLevel] = new RegexFragment;
+            groupRoot[groupLevel]->children.push_back(branchRoot[groupLevel]);
+            branchCurrent[groupLevel] = branchRoot[groupLevel];
+            break;
+        case '$':
+
+            break;
+        }
+    }
+
+    return root;
+}
+
+void NumRooms(RegexFragment* node, int minLength, int length, int & count, int level, const DeadEndSequenceVec& deadEnds)
+{
+    if (node)
+    {
+        if (node->proxyOf == nullptr)
+        {
+            std::string& regex = node->regexFragment;
+            length += regex.size();
+
+            if (node->deadEndIndex != -1 && length + deadEnds[node->deadEndIndex].second.size() >= minLength)
+            {
+                std::string padding(level, ' ');
+                std::cout << padding << regex << " " << (length - minLength >= regex.size() ? regex.size() : length - minLength) + deadEnds[node->deadEndIndex].second.size() << "\n";
+                count += (length - minLength >= regex.size() ? regex.size() : length - minLength) + deadEnds[node->deadEndIndex].second.size();
+            }
+            else if (length >= minLength && regex.size() > 0 )
+            {
+                std::string padding (level, ' ');
+                std::cout << padding << regex << " " << (length - minLength >= regex.size() ? regex.size() : length - minLength) << "\n";
+                count += (length - minLength >= regex.size() ? regex.size() : length - minLength);
+            }
+
+
+
+            auto& children = node->children;
+
+            if (children.size() > 0)
+            {
+                for (int i = 0; i < children.size(); i++)
+                {
+                    NumRooms(children[i], minLength, length, count, level + 1, deadEnds);
+                }
+            }
+        }
+        else // has a proxy
+        {
+            NumRooms(node->proxyOf, minLength, length, count, level + 1, deadEnds);
+        }
+    }
 }
 
 int main()
 {
-	std::string regex = "^WNWWWWNENENNNNNENESSSENNENNESSSWSEENESSSWWSEEENNEESWSEESSEEESSSWSSSSWWNWSSWNWSSSWWWSSESENN(ESSSEENWNEESESEEEEESESEENEEESSWNWSSSWSWNNENWWSSSSSWSSWWNNNWWWSEESWWWWSESWSWNNNWWWWNEENNNWNENWNNE(NWWNWWNNE(S|NWNENESEENNW(S|NWWNNNWWN(EENNWNE(EEESWSSSEEENNW(WSEWNE|)NNESE(N|SEEESWWWSESWWWSE(SWWNWWN(NNNN|EE)|EEE(S|NN)))|NWNEN(EE|WWW(SESSW(W|N)|NN)))|WSSSENESSWSS(ENEEWWSW|)SSWWWNENWWSWWWWWSESWWWSWWWSESEESESENNENN(EENN(WSNE|)ESSESEEESSESEESE(NNWWN(WNNWWN(EE|W(WNSE|)S)|E)|SWWWSSWWNNNWSSWWWWNNNN(NEN(W|ESESWSSE(NEE(NWNEWSES|)ES(EE|SS)|SWWNNN))|WSSSSSESWWNNNNWWWSWWNWWNNEN(ESS(W|E(E(NWES|)E|S))|WNWWNWNNNNNWWSSWNNWWSESWSWWNNE(S|NNENNESSENEEEEEENENWWNENNNWNNWWNNWNENWNNWNEEEENENWWWS(WNWSWNNENWWSWWSEESWWWSSESWWSESESWWSWNWNE(NNWWS(WSESWSWSWNWSWSWNWWNEEENEENE(S|NWNWSWNWWWNEENNWWWNNNWWNENEES(SENNENWNENNWNEENNNNNNNNNNNNNWNEESEEEENNNWSSWWNWWWWSWNWWNNENWWSSWNNNWSWWSESWSSWSSESWSSEEEENEESWSWWSSWNNWWSWNNWSSSESSW(SEENESSESEEENWWNWNEN(WWN(WSNE|)N|EEESEESENNNE(NNNNWSSWNNW(NWNWNN(NWW(WSESE(SWS(W(NNWESS|)S(E|W)|EE)|N)|NN)|ESE(ES(E(N|S(ENSW|)W)|W)|N))|SSWSS(WWNEWSEE|)ENE(SSWENN|)E)|SSSSSWWN(E|WSW(NN(WNWSNESE|)E|SSSSS(ENNE(NNWSNESS|)(E|SS)|WWNNNWN(EESSSNNNWW|)WWSESESWWWN(NWW(SSSE(NN|SWSSSEENESSSSWNWSW(NNEEWWSS|)SEEEENEENWNEESE(NNWWWW(NNEN(WN(WWSESWWS(NEENWNSESWWS|)|E)|E(SSWENN|)E)|SS)|SWSESE(NNEEWWSS|)SSS(WWNENWWWN(WSWWSSSEENESE(NNWWWS|ESENESSWSWSESEEEESESSESSSWWNN(ESNW|)WNN(ESNW|)NWSSWWWWSESWSWSWNWSSEEENESEEENNE(NWWN(E|WSS(SENSWN|)W)|SSENESENEENWNENWNEENNWSWWNENWNENW(WWWNWSS(WN|EEES)|NEEEEN(W|E(NWES|)SENEEESWSESSWWSEES(WSS(ENSW|)SWS(WNNENNWNNWSSW(NNNN(WWSSEN|ESENE(SEWN|)N)|SE(E|SSWSSW(NNNEWSSS|)SSEEN(W|N(N|ESSE(NN|SWWSESESESEESWWWWN(WWNN(ESEWNW|)NWN(WSWNN(ENWESW|)WSWWSWWNWSWWNEN(EEE(EE|S)|WWSWSESSSWSWNNENWNWWSSWNW(NNNNNENNE(SSSWSEES(WWS|ENE)|NENWNNWW(NENWNENEN(EEEES(E|SSSESS(ENESNWSW|)WWSW(SS(ENSW|)W|NWNNNESE(S(W|E)|NNWW(WSS|NEE))))|WW(S|NENWNNNE(SS|EE)))|SSS(ENNSSW|)SS))|SSEESE(SWWNWSSEESENESESWWSEESSSSWWWSSWNNNENEE(SWEN|)NWWWW(S(SSSSSSSEEEESSSWWWNN(ESENSWNW|)WSSSEEESSENEENW(W|NENESESEESEENWNWWNWNENWNWSWS(W(NNNWSWN(WSWNSENE|)NNESEEN(NEESSW(N|S(WSNE|)EESESSES(W|ENNWNENWNNENNNENNEESEEESSENENNW(WNNNWSSSWNWNENNEN(WNENNWWWSSSSWWWSEEE(SWS(E|WNWSSS(ENSW|)WNNWSSSS(SSSE(NNNNESS(NNWSSSNNNESS|)|S)|WNWNW(SSEWNN|)NNNNN(W(W|S)|EEEE(SSWNWSSS(WNNNSSSE|)S|NEENNWWWN(WSW(SES(ENEEWWSW|)WW|N)|EEEE(NEWS|)SSS)))))|ENNNNE)|EES(W|EEESENEENENEENWNE(ESSSENNESSSSWSEENESSWSSSWSEESSWNWWNWSWSWWNWSWNWNEENNENWNNEES(SSES(ENE(NE(S|NWWSWNNNE(N(WW(NEWS|)SW(N|WWSWWSEESWSWW(N(E|NWWNNEESW(ENWWSSNNEESW|))|SSWSSSWSESENESSENEESENESSESEESWWSEESESESWSSESENESEESWWSSEEEENW(NNNNESEEESSEENENNNESESWSEEENNNESSEESENNNNENENEESWSSESENN(W|EEEENESSESWSWNWSSSSSEEENWWNNEES(W|ENEENENNWWNENNWSWW(SESSS(ENEWSW|)W|NENWNWSWWNNNNWSWWSSESE(NNWESS|)SS(ENEEWWSW|)WWN(E|NWWWWSWSWWNWNWWSWWWWSS(WNWWWSWS(WNNNE(S|ENWWWNNWSSWSESE(SWWSW(S(EESENNW(ESSWNWESENNW|)|W)|NN(NNWS(S|WNNNWWNWNENN(WSWNWSWWN(W(S|NWSWNNENNEEN(SWWSSWENNEEN|))|E)|EN(W|ESSESS(ESE(SWWNSEEN|)NNNENNEEESWWSSWSEESSEENWNEESENNNNWW(SWWSEEEN(SWWWNEWSEEEN|)|NENEENWWWWWS(EE|WWW(SSW(SS|W)|NENE(NNESE(S(W|EEEN(WW|EEEEN(WWN(WSNE|)EE|EEEEE(SSSSENESENESSSSESWWNNWWSWWNN(E(S|EEE)|NNNNWWWSESSSWSWWNENENWWN(E|W(W|SS(E|SSW(NWES|)SESWSEEENESESWWSE(EEEENNESSS(S|ENNEN(WN(WWWW(SSENSWNN|)NW(WWWSNEEE|)(S|NENNNN)|N)|EEE(SWS(W(W|N)|E)|NEENNW(W(SEWN|)W|NENEN(ESEEESWSESSENNENENNWW(NENEN(ESESENEENNWWNEN(WWSS(SEEWWN|)W|ESESSESSSENESESWSSWNNWWSSE(SEEEESSSSESENNNW(NEESSSEESSEENNEENWWNNEEENNNNWWNWNEESENNNEENWNWWS(SSWWWNENWWNWWNNNWWSWSWSESSESSENESENE(NWNWSWNNW(NENSWS|)S|SSWSEE(NN|ESWWSWWN(E|WSS(WNWN(WSNE|)ENN(EESWENWW|)W(NNW(NNWW(SSENSWNN|)NENNWNWSS(E|SS|WNWWNEENNENWWNNENENWNWSSWNNWSSSESSS(SENSWN|)WNWN(WWWWNNNESSEENE(S|NWW(NNWSWNWNNWWSESSWNW(SSEEE(N|SSSWWWNEENWWWNNWSSWS(WNW(NEENSWWS|)S|EES(SEEEEEES(ENESEWNWSW|)(W|S)|W)))|NNNEEENWNNW(SS|NNENNENNESSSESEENWNNNW(NEESSENEEEESSWSESWSSEEN(NNESSSEEENNENWNWNENNENENWNNNNWSWWWWNWNNENNNENESEESSWNWSSSW(SEENNEENENEEENWWNNENNNNWNWNEENWNWSWNNNNESEES(WW|SESSENESSENNNWNENWWNW(SSESNWNN|)WWNNWWNEEESES(ENNWNWNWWWWS(SSWWNNNNNEES(WSSSNNNE|)EEEEENWNNWNENWNENNNESSENENWNWWNWNN(ESENESENESSEEENWN(WSNE|)EEEEEEEEESWWSSWSSWWSWWWSWWWSEEEEEEN(WW|ESESENENWN(W(W|S)|ENN(WSNE|)EESWSESSESWW(WSSSSESSWSESESSEE(NWNENNWSWNNNESENNWWWNEN(EE(SWEN|)NNNNNW(SS|NENWWWWNEEEENWWNEE(WWSEESNWWNEE|))|W)|SSSSSWNWWNENN(ESSNNW|)WWWWSSSSSWWSSEEN(W|EEESEESWWWW(NEWS|)WWWWNWSWNWWSWNWSSSEEESWWSWW(N(E|NNNNW(SSSSWENNNN|)NN(ESEEENESENNNWSWNNEEEENESE(SWS(WW(NE|SSEN)|E)|NNWWNENWNENNNESSESE(SE(S(ENSW|)WWNW(S|N)|N)|NNWNE(NNNNWSSWNWSWNNEENWWWSSSSSSWWNNE(S|NNNNWSWNWSWNNN(NENNN(WNWWEESE|)EEEESS(WWN(WSSEWNNE|)E|ENNNEN(WWSNEE|)EESWSSWN(SENNENSWSSWN|))|WWSSE(N|SS(WNSE|)SESESWW(W|N|SESSSSENNNNE(NNNN(ESNW|)W(S|W)|SSSESSS(WNNSSE|)ENE(S|NNNN(WS(WNSE|)SS|ENNNEEE(WWWSSSNNNEEE|))))))))|E)))|W))|SSSEENN(WSNE|)EESSSSESWWWWWSWSSWNNWW(SESSEEENNEEEEN(EESWSSSWNWWSSE(N|SSSENENN(WSNE|)ESENENNNNNNNENWWSW(NNW(NNN(WW|ESSEEES(WW|ESSSWSSENENENNW(NNEES(SEEE(NWWNNESENNWWNENE(N(WWSWNWSSSWWS(EEENNSSWWW|)(S|WWNENNWN(EEESSWN(SENNWWEESSWN|)|WWW(SES(W|E(E|SS|N))|W(WW|N))))|NNNNWW(SEWN|)NWSWWNNNNE(SSS|E))|S)|SWWSW(N|SWSWSSEESESESE(NNNNWNENW(NEWS|)WSS(SESNWN|)W(N|W)|SWSWSWNNENWNWWSESSSWNNWWSESSSSSESWSSSSESEEEENWWWNNW(NEEENESSWWSEEE(SSSSWNWSWNWSWSWWSSSWNNWSSWNWSSSENEEESWWSESENESSSEEENESSSESSE(SWSSSE(NN|SWWWWSESSWSESSWSSWSESSWSWWNEN(NNNNNWWNNNWSWWNNW(N(EENNNEESESSWW(N(N|E)|S(WSNE|)EESSSENE(SS(E|SS)|N(WNENWNNESENEE(SWEN|)NWWNENN(ESSNNW|)NWN(E|WSWNWWW(NN(EESWENWW|)NWNWWNNWSSWS(SS|WNW(NWSWNNNNWWNENWWNENNESENNWNEEEENNWWWNNESENEEESW(SEESEENNNENNWSWSS(S|WNNNENN(WSWNWNNWSWSESSS(EN(ESNW|)N|WWNWNNNE(SSESNWNN|)NWWNWS(SESSW(N|SES(E|SSSWS(EEEE|SWNWNNE(S|ENNW(SWWWWSEESSWSESSWW(SEEE(ENN(W(S|N)|E)|SSWNWWWS(EESSENEESWS(EEE|WW(SE(S|E)|W(NN|W)))|W))|N(WNNE(N(WNWNN(E(S|EEEE)|WSWSESSE(N|SWWNWWS(E|W(SEWN|)NWWWNENNEEESS(WNWSNESE|)E(NNNWNN(WSWWWS(WNN(N(ESEEWWNW|)N|W)|SS|EEE)|NNN(W|ENE(E|SSSW(N|SSE(S|N)))))|E))))|E)|S)|E))|NN)))))|WNNEEN(W|EESWSEE(NNE(NNEEE|SSE)|S))))|NENEE(NEENWNE(NNWSNESS|)EE|SWSEESW(WWNSEE|)SESSW(N|SESWW(N|SEESWSESWSS(WWNNE(NNWSWSSSSE(SWWSWWWSWS(WNNNE(EENNWNEENE(NN(WNWSS(WS(E|WNWSSESWW(W|S(EEE|S)))|E)|E)|SSSW(S|N))|S)|EE(SW|NEE))|EE)|S)|EEN(N|E|W)))))))|W)|S))|WSW(N|SSES(WSSSNNNE|)ENENW(NEESSS(SEENNW(NEESNWWS|)S|W)|W))))|E)))|WW)|SSSWW(NEWS|)SSENEENEESWSSEESSS(ENNNNWW(EESSSSNNNNWW|)|SWWNWSSEEESESWWNWWSESEEEEESWWSEESEEEEE(NNNWNNE(NWNNE(S|NNWNENWNNE(NNNWSSW(NN|SSSSWSES(E|WSSE(SSSWNW(NEWS|)S(WWNEWSEE|)SESWSEEN(ESNW|)N|N)))|S))|S)|SSWNWWS(E|WWN(E|WNWSWWNNWWSESS(WWN(NWNWWNEENE(S(S|E(EEESSNNWWW|)N)|NNNWWNWNWSSESES(ENSW|)SWWSWNWSWSWWWNWNNNNESESS(WNSE|)SENENNNW(SS|WNNNESENNNESES(SW(N|S(WW|SE(SES(WWNSEE|)E|N)))|ENNWNWN(EESE(N|SEESSS(WNWNEWSESE|)SENNEN(WNENWESWSE|)EES(W|S))|WWS(E|SSWNNNWSWWSESWWSWWWNNNNNEENNNNN(WWN(NNNNN(WSSWNWSSW(NNNWESSS|)SESESWSEE(ESE(N|SWS(E|WNWSSESSWSW(SSSWSWWSWSESWSEESWSWWSESWS(WNWNWWWSS(ENESEWNWSW|)WWNNWWWNEEENENESES(WWSSNNEE|)EEE(S|NWWNN(ESEE(SE|NW)|W(S|WWWSWSWWNNWNNWWSWSWSWSWWNENENNWWW(NEEEES(ENE(NWES|)EEEEEESWS(EEEENWNENNNW(NEEEWWWS|)SWS(E|WNWWS(WNNE(N(N|W)|E)|E)|SS)|SW(NWNEWSES|)S)|S)|WWWWSW(SWWSSWWWSESENESSWWS(WWWWNNWSWWNWNWSSWS(EE(N|EEE)|WWNENWWWWWNNWSWWNWNWSWSSSENNESSENESE(N|S(EEEENWWW(EEESWWEENWWW|)|WWWWWWWWWNWNNEEENNNNEENESEENESEEESEESEEES(WS(ESNW|)WNWSWWNN(ESNW|)WNWWW(WWWWS(E|SSSSWWN(E|W))|SE(S|E))|ENESENEEENESE(SWS(WNWSW(W|S|N)|SSEENWN(SESWWNSEENWN|))|EN(ESENSWNW|)WNWWWSWNNNESEN(EESWENWW|)NWWNWSSSSWS(E|WNWSWWNNNNNESSENNNWWNEENENWWWNWWWNWNWSSSWNWNNWNWNW(NENWN(W|NNNEESWSEESENN(EESWSSSSS(EN(N|ESE(S(W|SENEN(E(N|EESSWS(EE(NN|SSEE(NWES|)ESWS(ESNW|)WNWWSSE(N|SWSESWWWS(NEEENWESWWWS|)))|WN(NEWS|)W))|W))|N))|W(NNWW(SESNWN|)N(NWES|)EE|SS))|NNW(WWNSEE|)SS))|SSS(W|SEN(ESSSSEN(ESSESSS(WWNENWWSWWS(EESNWW|)WNNEEN(NWWWN(EEENWESWWW|)WSWWNW(SSEESSENE(SSWWWWSSWNNWWWNENNWSWSSWNNNW(SSSSEEEESSE(NN|SWWWSWW(NENEN(WWS|ES)|SSEEN(ENESSSS(ENNEE(NWN(WSNE|)ENN(WSNE|)ESSENE(NNW(S|N(WSNE|)EEE)|S)|SS(WNSE|)E)|WWWWNEEEN(SWWWSEWNEEEN|))|W)))|NNNESE(N|S(W|S|EEESE(NNWESS|)SEESWWWN(SEEENWESWWWN|))))|N(W|EE))|N(EESNWW|)N)|EE)|SEENWNENNW(NENW(WSNE|)N(EESSE(N(EE|N)|SWSSSSSENNNN(SSSSWNSENNNN|))|N)|S))|N)|N)))))))))|EEENENESS(EEEENWNEEN(WWNWWS(WNWN(WSS(S|E)|EEENW(NEEEE(SWWSES|E)|W))|SE(SWEN|)N)|ESSS(WNSE|)ENESENESEEEEENWWWWNENNWWS(E|SWWWNENE(S|NENE(SEWN|)N)))|W))|NNWNEES(NWWSESNWNEES|))))))|EEENESEEENNENEESWSES(WWNSEE|)ENENN(NW(WWNEEENNWNNWSWNWN(EEEENEE(SSW(WSNE|)N|NN)|WNW(NENSWS|)SSSW(N|SSSW(SEEE(SWSW(SEWN|)WW(NEE|WS)|NWNNEE(NWNSES|)S(ENESEWNWSW|)(W|SS))|NWNENW)))|SS)|ESSEEN(ESENEEN(W|ESEESWS(EENSWW|)WWW(NEEWWS|)WWWWWW)|W)))|NN(W(NNE(NWN(EEE|NWW(NNE(SENSWN|)N|WS(WNWSW(NNENWWWNEN(ESNW|)W|S)|SENESSW(ENNWSWENESSW|))))|S)|S)|E))))|NNNNWS)|E(N|S))|E)|EESE(N|SSSES(WSWNNW(NENWNSESWS|)SSSWW(NE|SSENE)|EEENES))))))))|E)|EEEE))))))|E))|NNNNNW(NWNWSWNNENWNWSS(SSSEWNNN|)WNNNNEENEEEESSWSW(WN(NE(E|S)|WW)|SES(W|SE(NNN|S)))|SS))|NNNNWWWNNWS(SSEWNN|)WNNEEEEE(N(W|N)|SSWWNE))|S))))|W)|S)))|S)|SESSSWSESW(ENWNENSWSESW|)))|WWW)|NEEENEEEEN(NN|WWWWWNN(ESNW|)WSSW(SEEWWN|)(WW|N))))))|NN)))|WSWWN(E|WSSWWSSSWSSWNWWNWNNNENEN(WWSWSWWWSSENEESWSSWSEEN(ESSSSSESWWWNNWSWNNN(ESEE(NWES|)SS|WNWNEE(S|N(E|WWWNEENWWNNWSSWWSSWNWWSESWWSWSWWNNWWWWSWWNENENWNEEENWNEN(ESSSESEES(ENNEEENEENWN(EEEEEES(WSWNSENE|)ENE(S|E)|WWWWSWNWWSES(W|E(SWEN|)EENE(S|E)))|W(WWWWNEE(WWSEEEWWWNEE|)|S(S|E)))|WWSSWWSWSS(ENSW|)WWNNNNWSSWNNN(EEEEEESWWWS(E|SS)|WSWNWSWSWWWNWSSWSWWNNE(NN(WSWWWWWWN(WSWWSWNWWN(EEEE|WSSWSWNNN(ESNW|)WWWSWWWSEEEENESSSSWWNN(ESNW|)WWWWWWWNWNN(WWWWSESEE(NWES|)SESWWWN(E|W(SSEEESWWSSW(SSSSSSSE(NNENWNENWNENEN(ENNEEEN(WW|ESSESEESSSW(SS(EEN(EES(W|EE(S|NENEENNNWWSWNWWSWSS(ENE(N|S(ENEENSWWSW|)S)|WNNNEN(WWNW(WNEEWWSE|)S|EEENN(WSNE|)EEN(NESESENEESWSEENENWN(WW|EESEEN(ESSWWSSWSWWWN(EENENSWSWW|)WWSSE(N|SWSSSSWSEEESENENNNEESENENWWWNWN(WWSSSSE(NN(E|N)|SWWNNN)|EEEN(NNESENEESSEESWWWN(WSW(S(ESSENNESSEENWNEENNNESSENNNEEEN(WNN(ESNW|)WSWWWWSES(ENEEWWSW|)WW(SEWN|)N|EESWSSSWSESEENEEN(NNWWSS(ENSW|)W(S|NN)|EESSESSENNENE(NWN(WSSWNSENNE|)E|EEEEEN(W|NESSSWSSWSSENEESSW(N|WWSEEEENEESWSSSEESENNEEESEENWNNESENNNESENN(WWWWSS(ENSW|)WWWNENE(S|NWWWNENWN(E|WN(E|NWWN(WWSSSSEENWN(EESSESWWSESE(S(WWNW(S|NWN(WSNE|)E)|SE(NNEWSS|)SES(ENESNWSW|)WW(WSEWNE|)N)|N)|N)|NNESSE))))|ESENNNNES(SSSSSSSSENEE(EE|SWSESSSSSSE(SSWSSS(EE(SWSNEN|)NN(WSNE|)ENNW(S|N)|WNWNNNE(NNNNWSWWSSSSWSSS(ENEN(W|NNNENW)|SWWWSSENES(ENSW|)SWSESSESSENEEEESSWNWSSWSSSE(S(SSE(SWEN|)N|WWNNNNWN(EENSWW|)WSWS(EE|WNNENN(ESNW|)NNWSSWWWWWNNNNWWNNNESEEEENNNWWSS(ENSW|)WNNNNENNWWNNWSSWSSSWWWNENNE(NWWNENWNNWNNEE(S(W|EESESS(ENNENE(NWES|)SEEN(EEEENNESSE(NNNNNWSWS(W(SSWNSENN|)N|E)|SEE(NWES|)S(ENSW|)WWS(WNNWWSSE(N|SSE(N|SSWSSSSWWW(NNESENNWWWSW(NNNESEENNN(ESS(S|E)|NNW(NEWS|)SSWNWSWS(EEESNWWW|)WNNNE(EE|S))|W)|SSSWSES(ENSW|)SSWWWNNNE(NWWW|SSEN))))|E))|W)|WNW(NWS|SSES)))|NWN(E|WSWNWSSESSSSWWSEESSE(ESWSSWWSSWNNNEENWNNWWSESWSSWSSSE(NN|ESENEENN(WSNE|)EEEEES(ENNNN(WSSNNE|)E|WWWWSSWSEESENE(SSEESWSESSEEESENE(E|SS(S|WWWNWWSS(ENSW|)WWWSES(ENSW|)SWNWSW(SEE(SWWEEN|)E|WNENENWWNWWW(SSENESE(WNWSWNSENESE|)|WWNNNNEENEENWWWNWSS(E|WWNENWNEN(EES(W|EES(E(EESSENESSWWSWN(NN|WWSWSES(WWNNSSEE|)EN(N|ESESENESENNWN(WSWENE|)E(ESSSNNNW|)NN))|NN)|W))|NNNWNWNENWWWSESSSSEE(NWNSES|)SWSWSSWSEE(SWSE(ENESNWSW|)S(S|WWNWWWWNNNENWWWSSSE(NN|SWSSSWNWSWWWNNESENNNNWWSESWWSSSWWWWSSW(SEEEEENN(ESENESSEENEESEENE(SSWSWWWSWSESWSSSWSSWSWNNWNNWNNWS(WNNEENNESSSES(W|SSE(NENNNW(NNW(N(W(NEWS|)WWWWSESEN(SWNWNEWSESEN|)|EES(S|ENE(EE|N)))|SS)|SS)|S))|SSESSSE(N|SWWNWN(NESNWS|)WWSW(NWWWEEES|)SESSESS(WNWNNSSESE|)E(NNN(NW(N|S)|ESES(W|ENEENW(WW|NEEEN(W|NNESSES(ENENWNNNNEEN(WWNNWSSSWSSE(SS|N)|E(E|SSWSS(WNNSSE|)SSEE(NWNNSSES|)SS))|W)))))|S)))|NNWNN(ESENSWNW|)WSW(SS(WWWSNEEE|)E(E|N|S)|N))|WWS(WNSE|)E)|NNNEN(WWSNEE|)EEN(E(SSWWEENN|)NWNENWNEES(SS|ENENEEE(NWNNNENEEEEESSSSWWNWSW(SEEEEES(ENN(E|WNENWNN(ESNW|)NWWWNENNNWSWWNWNENWWNENWWNNWNWNWNENENENWWNW(SS(E|SWNWSSESSWNWSWSSSWNNWSSWNNNNNWSSWSESSWWSEEEESSSWSWNWWSSWNNWWNNNNWWNEENWNNN(WW(SWSES(ENNSSW|)WWWNN(ESNW|)WWSSSSEN(NN|ESSWSSEEEENESE(SSESWSEE(NN|SEEN(EESWSSSSSS(WWNWWSWNNWWWSSWSWWWSWS(SSSENEES(SENNNWNW(SWNSEN|)NEEES(W|EENWN(W|NE(NWES|)SESE(SWSSWS(WNN(WSSNNE|)E|E)|NE(N|E))))|W)|WN(WSWNSENE|)NEN(W|EEENNWWNENNW(SW(SSSEEWWNNN|)N|NNNNEEN(WWNNNSSSEE|)EEEESWWSW(N|SEENESSESWWNWSWNW(WNENWESWSE|)SSSE(SS|NESENEEEN(N|EESE(N|SS(WWWN(WW|E(E|N))|S))))))))|EENNW(S|NNESEEESESENEESS(W(N|WWSSWWNW(SWNSEN|)NNE(NWES|)ES(W|S))|ENENNW(S|NNWNNNNWNNEENNWWS(E|WWWW(NEENE(NWNEEE(ESS(WNWSNESE|)E(N|SESSW(N|SEE(SESEE(SSWWWSWNW(SSESSS|NEN(ESEEWWNW|)NWSW(NNWESS|)SS)|E)|N)))|N)|S)|SSENESE(N|SWWWWSSSW(NNWWNSEESS|)S(W|ESENNNEEEE(NWWWWEEEES|)SSWWN(E|WSSEEEESWWW(EEENWWEESWWW|))))))))))|W))|NNWWNNWWSESWS(W|E)))|NNNN(E(NNNNNN(E|W(WS(WNSE|)E|N))|S)|W))|ESEESE(SS(E|WW(N(NWES|)E|SESWSSENEES(EENWESWW|)W))|NNE(S|NEEEESWSE(SWEN|)ENENNN(EE|WWWS(WWWN|EES))))))|NENEENNNEESWSSSS(WWNEWSEE|)E(ESSSWNNWSSSEESEENNESENEEESWSW(SWNWSSESSSSENENENNENESESWSW(SESESSSS(E(NNENWNENWN(WSNE|)NEE(S(SE(SWEN|)N|W)|NNNNWSSW(SEWN|)WNWW(NENWN(EESSE(S|NNNEE(SSWNSENN|)NENWWSWW(NE|SWN))|WWWWNWWW(NEEEE(SENSWN|)N(N|WW)|S(SS|EE)))|WSWSWS(S|E)))|SWS(S|E))|WWNENNWWW(SWNW(SSSE(SWEN|)NEE(SW|NE)|WWNW(NNW(S|NEE(SE(N|S(W|S))|NWWN(EE|WW(SSENSWNN|)WN(N(WSNE|)N|EE))))|SS))|NE(N|E)))|N)|N)|N)))|SW(N|SES(WWNSEE|)E))|NN(WSNE|)NESEE(NWES|)S)|SSSW(NW(NEWS|)W|SESWSE)))|W))))|NN)))))))|NNWWSE)))|NNNN)))|SS)))|NEN(NEWS|)W))|E|SS))|NN))|EEENWNNNENWNW(SSW(N|SES(WWNWWW(NEWS|)SEESSSWNNW(ESSENNSSWNNW|)|S))|NNESESENEE(SSW(N|SSSSSESWWNNNN(WSNE|)NN)|NWNWSWN(SENESEWNWSWN|))))))))))|WW)|N)|N)|W)))|W))|W)))))|W)|W)|NWN(E|WW(SEWN|)WW(WSWENE|)NEE(NWWEES|)E)))|W)|SWSESW)|NN)|N))|ESESEENN(W(W|S)|EEE)))|EEEEE)|E(EEESENE(WSWNWWEESENE|)|SS))|S))))))|N)|ESE(SSSWNNWSWSESE(WNWNENSWSESE|)|EN(ESNW|)W))))|EEE)|W))|W|NNN)|W)|SS)))|S))|E))|S)|S)|EESSEE(NWNENESEENNWS(NESSWWEENNWS|)|S(WW|SS))))))|E)|S)|N))|W)|S(E|S))|W))))|W)|SWWWWN(EENWWEESWW|)WSW(SEEWWN|)N)))))|EN(ES|NWWSE)))))|NNWN(ENWESW|)WWWSSWSE(SW|ENNE))|S))))|WNW(N|S)))))|E))|N))|EENESS(ES(ENNWESSW|)S|WW))|ENEES(W|E(EN(ESESSENN(SSWNNWESSENN|)|N|W)|S(W|SS))))))))|WW)))|E)|S))|S)|SW(WNEWSE|)S)|W)|NWWNN(EE(SWEN|)NN|WSWWWS(SENESS(W|E(ENWNSESW|)S)|W)))))|S)))|W)|S)|E))|E)|NEENWWNE(WSEESWENWWNE|))|NNN)))|E)|E))))))|E)|ENENNW(NEENWNNNW(S(WW|SS)|NN(W|EEN(NWN(E|W(SSEWNN|)W)|ESSSSW(NNWESS|)SESE(SSESE(SSWWS(WNNW(S(S|W)|NE(ESEWNW|)N(W|N))|EEE)|N(ES|NWNE))|NN))))|S))))))|E(NWES|)E)|ENNEES(WSEWNE|)EE)))|NNESEN(NWWEES|)E)|E))))))|N)|W))|E)|E)|E)))))|WSW(S|N|WW)))))|EESENE(ESENESSEESWSWS(EEE(SWSSNNEN|)N(W|NNNWWNE(WSEESSNNWWNE|))|WNWNN(ESEWNW|)W(SSS(E|SSWNWNENWW(SSSEWNNN|)NEN(ES|WNW))|N))|N))|W)$";
-	
-	bool foundDeadEnd = false;
-	do
-	{
-		foundDeadEnd = false;
+    std::string regex;
+    std::cin >> regex;
+    std::cout << regex << "\n";
 
-		for(int i = regex.size(); i >=0; --i)
-			if (regex[i] == ')' && regex[i - 1] == '|')
-			{
-				int j = i - 2;
-				while (j >= 0 && regex[j] != '(')
-				{
-					--j;
-				}
-				regex.erase(j, i - j + 1);
-				i = j;
-				foundDeadEnd = true;
-			}
+    DeadEndSequenceVec deadEndSequences;
+    bool foundDeadEnd = false;
+    do
+    {
+        foundDeadEnd = false;
 
-	} while (foundDeadEnd);
+        for (int i = 0; i < regex.size(); ++i)
+            if (regex[i] == ')' && regex[i - 1] == '|')
+            {
+                int j = i - 2;
+                while (j >= 0 && regex[j] != '(')
+                {
+                    --j;
+                }
+                int deadEndRoomCount = (i - j + 1 - 1 /*pipe*/ - 2 /*parens*/) / 2;
+                deadEndSequences.push_back(std::pair(j, std::string(regex.begin() + j + 1, regex.begin() + (j + deadEndRoomCount + 1))));
 
+                regex.erase(j, i - j + 1);
+                i = j - 1;
+                foundDeadEnd = true;
+            }
 
-	//RegexGroup rootGroup;
-	//{
-	//    std::string tempRegex = regex;
-	//    rootGroup.end = ParseRegexGroups(&rootGroup, tempRegex, 0);
-	//}
-	//{
-	//    std::string tempRegex = regex;
-	//    FurtherSplitRegexGroups(&rootGroup, tempRegex);
-	//}
-	ParseRegex(regex);
+    } while (foundDeadEnd);
 
 
-	return 0;
+    ParseRegex(regex);
+    //deadEndSequences.clear();
+    auto root = ParseRegexTree(regex, deadEndSequences);
+    int count = 0;
+    int minDoors = 1000;
+    NumRooms(root, minDoors, 0, count, 0, deadEndSequences);
+
+    std::cout << "Number of different paths above " << minDoors << " " << count << "\n";
+
+
+    return 0;
 }
